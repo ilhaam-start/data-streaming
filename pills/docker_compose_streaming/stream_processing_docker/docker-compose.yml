@@ -1,38 +1,5 @@
 version: '3'
 services:
-  # spark-master:
-  #   image: bde2020/spark-master:3.1.1-hadoop3.2
-  #   container_name: spark-master
-  #   ports:
-  #     - 8081:8081
-  #     - 7077:7077
-
-  # spark-worker:
-  #   image: bde2020/spark-worker:3.1.1-hadoop3.2
-  #   container_name: spark-worker
-  #   environment:
-  #     - SPARK_MASTER=spark://spark-master:7077
-  #   depends_on:
-  #     - spark-master
-  # spark-master:
-  #   image: bitnami/spark:3.3.2
-  #   volumes:
-  #     - ./data:/opt/spark/jars
-  #   container_name: spark-master
-  #   ports:
-  #     - '8081:8081' # Spark Web UI
-  #     - '7077:7077' # Spark Master
-  #   environment:
-  #     - SPARK_MODE=master
-
-  # spark-worker:
-  #   image: bitnami/spark:3.3.2
-  #   container_name: spark-worker
-  #   depends_on:
-  #     - spark-master
-  #   environment:
-  #     - SPARK_MODE=worker
-  #     - SPARK_MASTER_URL=spark://spark-master:7077
   jupyter:
     image: jupyter/pyspark-notebook
     container_name: jupyter
@@ -41,10 +8,7 @@ services:
     environment:
       - JUPYTER_TOKEN=easy
     volumes:
-      - ./data:/home/jovyan/work
-      # - ./data/kernel.json:/usr/local/share/jupyter/kernels/python3/kernel.json
-
-
+      - ./data:/home/jovyan/work/data
 
   zookeeper:
     image: confluentinc/cp-zookeeper
@@ -65,7 +29,43 @@ services:
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_SCHEMA_REGISTRY_URL: "schema-registry:8081"
 
+  schema-registry:
+    image: confluentinc/cp-schema-registry
+    depends_on:
+      - kafka
+    environment:
+      SCHEMA_REGISTRY_KAFKASTORE_BOOTSTRAP_SERVERS: 'PLAINTEXT://kafka:9092'
+      SCHEMA_REGISTRY_HOST_NAME: 'schema-registry'
+      SCHEMA_REGISTRY_LISTENERS: 'http://0.0.0.0:8081'
+      SCHEMA_REGISTRY_LOG4J_ROOT_LOGLEVEL: 'INFO'
+  connect:
+    image: confluentinc/cp-kafka-connect
+    depends_on:
+      - kafka
+      - schema-registry
+    environment:
+      CONNECT_BOOTSTRAP_SERVERS: 'kafka:9092'
+      CONNECT_REST_PORT: '8083'
+      CONNECT_REST_LISTENERS: 'http://0.0.0.0:8083'
+      CONNECT_REST_ADVERTISED_HOST_NAME: 'connect'
+      CONNECT_CONFIG_STORAGE_TOPIC: '__connect-config'
+      CONNECT_OFFSET_STORAGE_TOPIC: '__connect-offsets'
+      CONNECT_STATUS_STORAGE_TOPIC: '__connect-status'
+      CONNECT_GROUP_ID: 'kafka-connect'
+      CONNECT_KEY_CONVERTER_SCHEMAS_ENABLE: 'true'
+      CONNECT_KEY_CONVERTER: 'io.confluent.connect.avro.AvroConverter'
+      CONNECT_KEY_CONVERTER_SCHEMA_REGISTRY_URL: 'http://schema-registry:8085'
+      CONNECT_VALUE_CONVERTER_SCHEMAS_ENABLE: 'true'
+      CONNECT_VALUE_CONVERTER: 'io.confluent.connect.avro.AvroConverter'
+      CONNECT_VALUE_CONVERTER_SCHEMA_REGISTRY_URL: 'http://schema-registry:8085'
+      CONNECT_INTERNAL_KEY_CONVERTER: 'org.apache.kafka.connect.json.JsonConverter'
+      CONNECT_INTERNAL_VALUE_CONVERTER: 'org.apache.kafka.connect.json.JsonConverter'
+      CONNECT_OFFSET_STORAGE_REPLICATION_FACTOR: '1'
+      CONNECT_CONFIG_STORAGE_REPLICATION_FACTOR: '1'
+      CONNECT_STATUS_STORAGE_REPLICATION_FACTOR: '1'
+      CONNECT_PLUGIN_PATH: ' /usr/share/java/'
 volumes:
   notebooks:
   
